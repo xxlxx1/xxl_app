@@ -24,6 +24,40 @@ class PhotoAlbumManager: ObservableObject {
     private var locationTask: Task<Void, Never>?
     private var yearLoadTask: Task<Void, Never>?
 
+    // Local city bounding boxes to avoid unnecessary API calls
+    private struct CityBounds {
+        let name: String
+        let minLng: Double
+        let maxLng: Double
+        let minLat: Double
+        let maxLat: Double
+
+        func contains(lat: Double, lng: Double) -> Bool {
+            lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng
+        }
+    }
+
+    private let knownCities: [CityBounds] = [
+        CityBounds(name: "北京市",  minLng: 115.42, maxLng: 117.50, minLat: 39.44, maxLat: 41.05),
+        CityBounds(name: "上海市",  minLng: 120.52, maxLng: 122.12, minLat: 30.66, maxLat: 31.86),
+        CityBounds(name: "广州市",  minLng: 112.68, maxLng: 113.70, minLat: 22.50, maxLat: 23.50),
+        CityBounds(name: "深圳市",  minLng: 113.75, maxLng: 114.88, minLat: 22.45, maxLat: 22.78),
+        CityBounds(name: "桂林市",  minLng: 110.08, maxLng: 110.48, minLat: 24.78, maxLat: 25.45),
+        CityBounds(name: "珠海市",  minLng: 113.10, maxLng: 113.68, minLat: 21.80, maxLat: 22.37),
+        CityBounds(name: "成都市",  minLng: 103.57, maxLng: 104.23, minLat: 30.40, maxLat: 30.98),
+        CityBounds(name: "杭州市",  minLng: 119.85, maxLng: 120.46, minLat: 30.05, maxLat: 30.45),
+        CityBounds(name: "香港特别行政区", minLng: 113.80, maxLng: 114.40, minLat: 22.10, maxLat: 22.50),
+    ]
+
+    private func lookupLocalCity(lat: Double, lng: Double) -> String? {
+        for city in knownCities {
+            if city.contains(lat: lat, lng: lng) {
+                return city.name
+            }
+        }
+        return nil
+    }
+
     init() {
         calendar.firstWeekday = 2  // Monday is the first day
     }
@@ -354,6 +388,15 @@ class PhotoAlbumManager: ObservableObject {
             for (index, location) in uniqueLocations.enumerated() {
                 // Check for cancellation
                 if Task.isCancelled { return }
+
+                // Try local bounding box lookup first
+                let lat = location.coordinate.latitude
+                let lng = location.coordinate.longitude
+                if let localCity = self.lookupLocalCity(lat: lat, lng: lng) {
+                    print("[Location] Local match: \(localCity)")
+                    await recordCity(localCity)
+                    continue
+                }
 
                 var success = false
                 var retryCount = 0
