@@ -151,9 +151,6 @@ struct CalendarPhotoView: View {
                                         Text(cityInfo.city)
                                             .font(.system(size: 14))
                                             .foregroundColor(.primary)
-                                        Text("(\(cityInfo.count))")
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.secondary)
                                     }
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 8)
@@ -174,9 +171,6 @@ struct CalendarPhotoView: View {
                                                         Text(cityInfo.city)
                                                             .font(.system(size: 14))
                                                             .foregroundColor(.primary)
-                                                        Text("(\(cityInfo.count))")
-                                                            .font(.system(size: 12))
-                                                            .foregroundColor(.secondary)
                                                     }
                                                     .padding(.horizontal, 12)
                                                     .padding(.vertical, 8)
@@ -197,9 +191,6 @@ struct CalendarPhotoView: View {
                                                         Text(cityInfo.city)
                                                             .font(.system(size: 14))
                                                             .foregroundColor(.primary)
-                                                        Text("(\(cityInfo.count))")
-                                                            .font(.system(size: 12))
-                                                            .foregroundColor(.secondary)
                                                     }
                                                     .padding(.horizontal, 12)
                                                     .padding(.vertical, 8)
@@ -711,9 +702,6 @@ struct ExportableCalendarView: View {
                             Text(info.city)
                                 .font(.system(size: 20))
                                 .foregroundColor(.black)
-                            Text("(\(info.count))")
-                                .font(.system(size: 18))
-                                .foregroundColor(Color(white: 0.4))
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
@@ -731,9 +719,6 @@ struct ExportableCalendarView: View {
                                             Text(info.city)
                                                 .font(.system(size: 20))
                                                 .foregroundColor(.black)
-                                            Text("(\(info.count))")
-                                                .font(.system(size: 18))
-                                                .foregroundColor(Color(white: 0.4))
                                         }
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 10)
@@ -754,9 +739,6 @@ struct ExportableCalendarView: View {
                                             Text(info.city)
                                                 .font(.system(size: 20))
                                                 .foregroundColor(.black)
-                                            Text("(\(info.count))")
-                                                .font(.system(size: 18))
-                                                .foregroundColor(Color(white: 0.4))
                                         }
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 10)
