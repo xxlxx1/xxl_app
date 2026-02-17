@@ -28,19 +28,36 @@ struct CalendarPhotoView: View {
     }
 
     private let years = Array(2000...2030)
-    private let months = Array(1...12)
     private let monthNames = [
         1: "1月", 2: "2月", 3: "3月", 4: "4月",
         5: "5月", 6: "6月", 7: "7月", 8: "8月",
         9: "9月", 10: "10月", 11: "11月", 12: "12月"
     ]
 
+    // Cyclic month picker: 200 repeats of 12 months = 2400 items
+    private static let monthRepeatCount = 200
+    private static let monthCycleCount = 12
+    private static let totalMonthItems = monthRepeatCount * monthCycleCount
+    // Middle base offset so user can scroll both directions freely
+    private static let monthMiddleBase = (monthRepeatCount / 2) * monthCycleCount
+
+    @State private var pickerMonthIndex: Int = monthMiddleBase + Calendar.current.component(.month, from: Date()) - 1
+    @State private var isInitialized = false
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 // Year selector and view mode toggle
                 HStack(spacing: 16) {
-                    Spacer()
+                    // Jump to today button
+                    Button(action: jumpToToday) {
+                        Text("今")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 32, height: 32)
+                            .background(Color.blue)
+                            .clipShape(Circle())
+                    }
 
                     Picker("年份", selection: $selectedYear) {
                         ForEach(years, id: \.self) { year in
@@ -52,11 +69,12 @@ struct CalendarPhotoView: View {
                     .clipped()
                     .environment(\.locale, Locale(identifier: "en_US_POSIX"))
 
-                    // Month picker only shown in month mode
+                    // Month picker only shown in month mode (cyclic)
                     if viewMode == .month {
-                        Picker("月份", selection: $selectedMonth) {
-                            ForEach(months, id: \.self) { month in
-                                Text(monthNames[month] ?? "\(month)").tag(month)
+                        Picker("月份", selection: $pickerMonthIndex) {
+                            ForEach(0..<Self.totalMonthItems, id: \.self) { index in
+                                let month = index % Self.monthCycleCount + 1
+                                Text(monthNames[month] ?? "\(month)").tag(index)
                             }
                         }
                         .pickerStyle(.wheel)
@@ -145,17 +163,23 @@ struct CalendarPhotoView: View {
                                 if photoManager.cityInfo.count == 1 {
                                     // Single location: just show it
                                     let cityInfo = photoManager.cityInfo[0]
-                                    HStack(spacing: 6) {
-                                        Text("📍")
-                                            .font(.system(size: 12))
-                                        Text(cityInfo.city)
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.primary)
+                                    NavigationLink(destination: CityPhotosView(cityName: cityInfo.city, year: selectedYear, month: selectedMonth, photoManager: photoManager)) {
+                                        HStack(spacing: 6) {
+                                            Text("📍")
+                                                .font(.system(size: 12))
+                                            Text(cityInfo.city)
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.primary)
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundColor(.secondary)
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Color.blue.opacity(0.05))
+                                        .cornerRadius(8)
                                     }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(Color.blue.opacity(0.05))
-                                    .cornerRadius(8)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal)
                                 } else {
@@ -165,17 +189,22 @@ struct CalendarPhotoView: View {
                                         VStack(alignment: .leading, spacing: 8) {
                                             ForEach(Array(photoManager.cityInfo.enumerated()), id: \.offset) { index, cityInfo in
                                                 if index % 2 == 0 {
-                                                    HStack(spacing: 6) {
-                                                        Text("📍")
-                                                            .font(.system(size: 12))
-                                                        Text(cityInfo.city)
-                                                            .font(.system(size: 14))
-                                                            .foregroundColor(.primary)
+                                                    NavigationLink(destination: CityPhotosView(cityName: cityInfo.city, year: selectedYear, month: selectedMonth, photoManager: photoManager)) {
+                                                        HStack(spacing: 6) {
+                                                            Text("📍")
+                                                                .font(.system(size: 12))
+                                                            Text(cityInfo.city)
+                                                                .font(.system(size: 14))
+                                                                .foregroundColor(.primary)
+                                                            Image(systemName: "chevron.right")
+                                                                .font(.system(size: 10, weight: .medium))
+                                                                .foregroundColor(.secondary)
+                                                        }
+                                                        .padding(.horizontal, 12)
+                                                        .padding(.vertical, 8)
+                                                        .background(Color.blue.opacity(0.05))
+                                                        .cornerRadius(8)
                                                     }
-                                                    .padding(.horizontal, 12)
-                                                    .padding(.vertical, 8)
-                                                    .background(Color.blue.opacity(0.05))
-                                                    .cornerRadius(8)
                                                 }
                                             }
                                         }
@@ -185,17 +214,22 @@ struct CalendarPhotoView: View {
                                         VStack(alignment: .leading, spacing: 8) {
                                             ForEach(Array(photoManager.cityInfo.enumerated()), id: \.offset) { index, cityInfo in
                                                 if index % 2 == 1 {
-                                                    HStack(spacing: 6) {
-                                                        Text("📍")
-                                                            .font(.system(size: 12))
-                                                        Text(cityInfo.city)
-                                                            .font(.system(size: 14))
-                                                            .foregroundColor(.primary)
+                                                    NavigationLink(destination: CityPhotosView(cityName: cityInfo.city, year: selectedYear, month: selectedMonth, photoManager: photoManager)) {
+                                                        HStack(spacing: 6) {
+                                                            Text("📍")
+                                                                .font(.system(size: 12))
+                                                            Text(cityInfo.city)
+                                                                .font(.system(size: 14))
+                                                                .foregroundColor(.primary)
+                                                            Image(systemName: "chevron.right")
+                                                                .font(.system(size: 10, weight: .medium))
+                                                                .foregroundColor(.secondary)
+                                                        }
+                                                        .padding(.horizontal, 12)
+                                                        .padding(.vertical, 8)
+                                                        .background(Color.blue.opacity(0.05))
+                                                        .cornerRadius(8)
                                                     }
-                                                    .padding(.horizontal, 12)
-                                                    .padding(.vertical, 8)
-                                                    .background(Color.blue.opacity(0.05))
-                                                    .cornerRadius(8)
                                                 }
                                             }
                                         }
@@ -229,9 +263,27 @@ struct CalendarPhotoView: View {
                 }
             }
             .onChange(of: selectedYear) { _, _ in
-                debouncedLoad()
+                if isInitialized {
+                    debouncedLoad()
+                }
             }
-            .onChange(of: selectedMonth) { _, _ in
+            .onChange(of: pickerMonthIndex) { oldValue, newValue in
+                guard isInitialized else { return }
+                let newMonth = newValue % Self.monthCycleCount + 1
+                selectedMonth = newMonth
+
+                // Use index difference to detect year boundary crossings
+                // Each full cycle is 12 items; compute how many boundaries were crossed
+                let diff = newValue - oldValue
+                let oldCycle = oldValue / Self.monthCycleCount
+                let newCycle = newValue / Self.monthCycleCount
+                let cycleChange = newCycle - oldCycle
+
+                if cycleChange != 0 {
+                    let newYear = selectedYear + cycleChange
+                    selectedYear = min(max(newYear, years.first!), years.last!)
+                }
+
                 debouncedLoad()
             }
             .alert("相册权限", isPresented: $showingPermissionAlert) {
@@ -269,6 +321,9 @@ struct CalendarPhotoView: View {
             }
         }
         .onAppear {
+            if !isInitialized {
+                isInitialized = true
+            }
             checkPermissionAndLoad()
         }
     }
@@ -306,6 +361,15 @@ struct CalendarPhotoView: View {
         }
     }
 
+    private func jumpToToday() {
+        let now = Date()
+        let currentYear = Calendar.current.component(.year, from: now)
+        let currentMonth = Calendar.current.component(.month, from: now)
+        selectedYear = currentYear
+        selectedMonth = currentMonth
+        pickerMonthIndex = Self.monthMiddleBase + (currentMonth - 1)
+    }
+
     private func toggleViewMode() {
         withAnimation {
             if viewMode == .month {
@@ -321,6 +385,8 @@ struct CalendarPhotoView: View {
     private func loadPhotos() {
         // Clear location info first when switching months
         photoManager.cityInfo = []
+        photoManager.photosByCity = [:]
+        photoManager.clearThumbnailCache()
         photoManager.loadPhotos(year: selectedYear, month: selectedMonth) { _ in
             // Photos loaded, now load location info
             self.loadLocationInfo()
@@ -486,6 +552,8 @@ struct FullScreenImageView: View {
     let monthName: String
     let year: Int
     let onDismiss: () -> Void
+    var allAssets: [PHAsset]?
+    var onAssetChanged: ((PHAsset, Int) -> Void)?
 
     @State private var image: UIImage?
     @State private var isLoading = true
@@ -494,18 +562,62 @@ struct FullScreenImageView: View {
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
     @State private var showDeleteConfirm = false
+    @State private var showPhotoActions = false
+
+    // Drag-to-dismiss states
+    @State private var dismissOffset: CGFloat = 0
+    @State private var backgroundOpacity: Double = 1.0
+
+    // Paging state
+    @State private var currentAsset: PHAsset?
+    @State private var currentDay: Int = 0
+    @State private var swipeOffset: CGFloat = 0
+
+    private var displayAsset: PHAsset {
+        currentAsset ?? asset
+    }
+
+    private var currentIndex: Int? {
+        guard let all = allAssets else { return nil }
+        return all.firstIndex(where: { $0.localIdentifier == displayAsset.localIdentifier })
+    }
+
+    private var hasPrevious: Bool {
+        guard let idx = currentIndex else { return false }
+        return idx > 0
+    }
+
+    private var hasNext: Bool {
+        guard let idx = currentIndex, let all = allAssets else { return false }
+        return idx < all.count - 1
+    }
+
+    private var dismissProgress: Double {
+        min(Double(abs(dismissOffset)) / 300.0, 1.0)
+    }
+
+    private var dismissScale: CGFloat {
+        1.0 - CGFloat(dismissProgress) * 0.2
+    }
+
+    private var calendar: Calendar {
+        var cal = Calendar(identifier: .gregorian)
+        cal.firstWeekday = 2
+        return cal
+    }
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                Color.black.ignoresSafeArea()
+                Color.black.opacity(backgroundOpacity).ignoresSafeArea()
 
                 if let image = image {
                     Image(uiImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .scaleEffect(scale)
-                        .offset(offset)
+                        .scaleEffect(scale > 1.0 ? scale : dismissScale)
+                        .offset(x: scale > 1.0 ? offset.width : swipeOffset,
+                                y: scale > 1.0 ? offset.height : dismissOffset)
                         .gesture(
                             MagnifyGesture()
                                 .onChanged { value in
@@ -527,14 +639,55 @@ struct FullScreenImageView: View {
                                     DragGesture()
                                         .onChanged { value in
                                             if scale > 1.0 {
+                                                // Pan when zoomed in
                                                 offset = CGSize(
                                                     width: lastOffset.width + value.translation.width,
                                                     height: lastOffset.height + value.translation.height
                                                 )
+                                            } else {
+                                                let hDist = abs(value.translation.width)
+                                                let vDist = abs(value.translation.height)
+
+                                                if allAssets != nil && hDist > vDist {
+                                                    // Horizontal swipe for paging
+                                                    swipeOffset = value.translation.width
+                                                    dismissOffset = 0
+                                                    backgroundOpacity = 1.0
+                                                } else {
+                                                    // Vertical drag-to-dismiss
+                                                    dismissOffset = value.translation.height
+                                                    swipeOffset = 0
+                                                    backgroundOpacity = 1.0 - dismissProgress * 0.6
+                                                }
                                             }
                                         }
                                         .onEnded { value in
-                                            lastOffset = offset
+                                            if scale > 1.0 {
+                                                lastOffset = offset
+                                            } else if abs(swipeOffset) > 0 && allAssets != nil {
+                                                handleSwipeEnd(translation: swipeOffset, screenWidth: geometry.size.width)
+                                            } else {
+                                                if abs(dismissOffset) > 150 {
+                                                    // Dismiss
+                                                    withAnimation(.easeOut(duration: 0.2)) {
+                                                        dismissOffset = dismissOffset > 0 ? 600 : -600
+                                                        backgroundOpacity = 0
+                                                    }
+                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                                        var transaction = Transaction()
+                                                        transaction.disablesAnimations = true
+                                                        withTransaction(transaction) {
+                                                            onDismiss()
+                                                        }
+                                                    }
+                                                } else {
+                                                    // Snap back
+                                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                                                        dismissOffset = 0
+                                                        backgroundOpacity = 1.0
+                                                    }
+                                                }
+                                            }
                                         }
                                 )
                         )
@@ -551,6 +704,12 @@ struct FullScreenImageView: View {
                                 }
                             }
                         }
+                        .simultaneousGesture(
+                            LongPressGesture(minimumDuration: 0.5)
+                                .onEnded { _ in
+                                    showPhotoActions = true
+                                }
+                        )
                 } else if isLoading {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
@@ -575,6 +734,15 @@ struct FullScreenImageView: View {
 
                         Spacer()
 
+                        // Photo counter
+                        if let all = allAssets, let idx = currentIndex {
+                            Text("\(idx + 1) / \(all.count)")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+
+                        Spacer()
+
                         Button(action: { showDeleteConfirm = true }) {
                             Image(systemName: "trash")
                                 .font(.system(size: 16, weight: .medium))
@@ -588,11 +756,12 @@ struct FullScreenImageView: View {
                     .padding(.top, geometry.safeAreaInsets.top + 20)
                     Spacer()
                 }
+                .opacity(backgroundOpacity)
 
                 // Date info
                 VStack {
                     Spacer()
-                    Text("\(String(format: "%d", year))年 \(monthName) \(day)日")
+                    Text("\(String(format: "%d", year))年 \(monthName) \(currentDay)日")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundColor(.white)
                         .padding()
@@ -604,11 +773,14 @@ struct FullScreenImageView: View {
                             )
                         )
                 }
+                .opacity(backgroundOpacity)
             }
         }
         .statusBar(hidden: true)
         .onAppear {
-            loadFullImage()
+            currentAsset = asset
+            currentDay = day
+            loadFullImage(for: asset)
         }
         .alert("删除照片", isPresented: $showDeleteConfirm) {
             Button("删除", role: .destructive) {
@@ -618,9 +790,69 @@ struct FullScreenImageView: View {
         } message: {
             Text("确定要从系统相册中删除这张照片吗？此操作不可撤销。")
         }
+        .confirmationDialog("", isPresented: $showPhotoActions, titleVisibility: .hidden) {
+            Button("在系统相册中查看") {
+                openInPhotosApp()
+            }
+            Button("取消", role: .cancel) { }
+        }
     }
 
-    private func loadFullImage() {
+    private func handleSwipeEnd(translation: CGFloat, screenWidth: CGFloat) {
+        let threshold: CGFloat = screenWidth * 0.25
+
+        if translation < -threshold && hasNext {
+            // Swipe left -> next photo
+            withAnimation(.easeOut(duration: 0.2)) {
+                swipeOffset = -screenWidth
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                navigateToPhoto(at: currentIndex! + 1, screenWidth: screenWidth)
+            }
+        } else if translation > threshold && hasPrevious {
+            // Swipe right -> previous photo
+            withAnimation(.easeOut(duration: 0.2)) {
+                swipeOffset = screenWidth
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                navigateToPhoto(at: currentIndex! - 1, screenWidth: screenWidth)
+            }
+        } else {
+            // Snap back
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                swipeOffset = 0
+            }
+        }
+    }
+
+    private func navigateToPhoto(at index: Int, screenWidth: CGFloat) {
+        guard let all = allAssets, index >= 0 && index < all.count else { return }
+        let newAsset = all[index]
+        let newDay = calendar.component(.day, from: newAsset.creationDate ?? Date())
+
+        // Reset states
+        image = nil
+        isLoading = true
+        scale = 1.0
+        lastScale = 1.0
+        offset = .zero
+        lastOffset = .zero
+
+        // Position off-screen on the incoming side, then animate in
+        swipeOffset = swipeOffset < 0 ? screenWidth : -screenWidth
+        currentAsset = newAsset
+        currentDay = newDay
+        onAssetChanged?(newAsset, newDay)
+
+        loadFullImage(for: newAsset)
+
+        withAnimation(.easeOut(duration: 0.2)) {
+            swipeOffset = 0
+        }
+    }
+
+    private func loadFullImage(for targetAsset: PHAsset) {
+        isLoading = true
         let options = PHImageRequestOptions()
         options.isSynchronous = false
         options.deliveryMode = .highQualityFormat
@@ -628,24 +860,48 @@ struct FullScreenImageView: View {
 
         let targetSize = PHImageManagerMaximumSize
         let imageManager = PHImageManager.default()
+        let assetId = targetAsset.localIdentifier
 
-        imageManager.requestImage(for: asset, targetSize: targetSize, contentMode: .aspectFill, options: options) { result, info in
+        imageManager.requestImage(for: targetAsset, targetSize: targetSize, contentMode: .aspectFill, options: options) { result, info in
             DispatchQueue.main.async {
-                self.image = result
-                self.isLoading = false
+                // Only update if still viewing the same asset
+                if self.displayAsset.localIdentifier == assetId {
+                    self.image = result
+                    self.isLoading = false
+                }
             }
         }
     }
 
     private func deletePhoto() {
+        let assetToDelete = displayAsset
         PHPhotoLibrary.shared().performChanges {
-            PHAssetChangeRequest.deleteAssets([asset] as NSArray)
+            PHAssetChangeRequest.deleteAssets([assetToDelete] as NSArray)
         } completionHandler: { success, error in
             DispatchQueue.main.async {
                 if success {
                     onDismiss()
                 } else if let error = error {
                     print("Error deleting photo: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func openInPhotosApp() {
+        // Construct a deep-link URL using the asset's local identifier
+        // The localIdentifier format is "UUID/L0/001", we extract the UUID part
+        let identifier = displayAsset.localIdentifier
+        let uuidPart = identifier.split(separator: "/").first.map(String.init) ?? identifier
+
+        // Try to open the Photos app at this specific asset
+        if let url = URL(string: "photos-redirect://asset?id=\(uuidPart)") {
+            UIApplication.shared.open(url) { success in
+                if !success {
+                    // Fallback: just open the Photos app
+                    if let fallbackUrl = URL(string: "photos-redirect://") {
+                        UIApplication.shared.open(fallbackUrl)
+                    }
                 }
             }
         }

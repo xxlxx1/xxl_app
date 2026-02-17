@@ -16,8 +16,10 @@ class PhotoAlbumManager: ObservableObject {
     @Published var photosByDay: [Int: PHAsset] = [:]  // [day: PHAsset], day is 1-31
     @Published var photosByMonth: [Int: [Int: PHAsset]] = [:]  // [month: [day: PHAsset]], for yearly view
     @Published var cityInfo: [(city: String, count: Int)] = []  // [(city name, photo count)]
+    @Published var photosByCity: [String: [PHAsset]] = [:]  // [city name: photos]
 
     private let imageManager = PHCachingImageManager()
+    private var thumbnailCache: [String: UIImage] = [:]
     private var calendar = Calendar(identifier: .gregorian)
     private var targetYear: Int?
     private var targetMonth: Int?
@@ -60,6 +62,10 @@ class PhotoAlbumManager: ObservableObject {
 
     init() {
         calendar.firstWeekday = 2  // Monday is the first day
+    }
+
+    func clearThumbnailCache() {
+        thumbnailCache.removeAll()
     }
 
     // Request photo library authorization
@@ -317,6 +323,7 @@ class PhotoAlbumManager: ObservableObject {
             guard authorizationStatus == .authorized else {
                 await MainActor.run {
                     self.cityInfo = []
+                    self.photosByCity = [:]
                 }
                 return
             }
@@ -332,30 +339,41 @@ class PhotoAlbumManager: ObservableObject {
             // Fetch all assets (not just one per day)
             let fetchResult = PHAsset.fetchAssets(with: .image, options: fetchOptions)
 
-            // Collect all locations first
-            var locations: [CLLocation] = []
+            // Collect all (asset, location) pairs
+            var assetLocations: [(asset: PHAsset, location: CLLocation)] = []
             fetchResult.enumerateObjects { asset, _, _ in
                 if let location = asset.location {
-                    locations.append(CLLocation(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude))
+                    assetLocations.append((asset, CLLocation(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)))
                 }
             }
 
             // If no locations, clear city info and return
-            if locations.isEmpty {
+            if assetLocations.isEmpty {
                 await MainActor.run {
                     self.cityInfo = []
+                    self.photosByCity = [:]
                 }
                 return
             }
 
-            // Deduplicate nearby locations (within 500m to reduce API calls)
+            // Deduplicate nearby locations (within 15km to reduce API calls)
+            // Keep track of which representative location each asset belongs to
             var uniqueLocations: [CLLocation] = []
-            for location in locations {
-                let isNearby = uniqueLocations.contains { existing in
-                    existing.distance(from: location) < 15000  // 1500m threshold
+            var locationAssets: [[PHAsset]] = []  // parallel array: assets grouped by representative location
+
+            for (asset, location) in assetLocations {
+                var foundIndex: Int? = nil
+                for (idx, existing) in uniqueLocations.enumerated() {
+                    if existing.distance(from: location) < 15000 {
+                        foundIndex = idx
+                        break
+                    }
                 }
-                if !isNearby {
+                if let idx = foundIndex {
+                    locationAssets[idx].append(asset)
+                } else {
                     uniqueLocations.append(location)
+                    locationAssets.append([asset])
                 }
             }
 
@@ -363,25 +381,30 @@ class PhotoAlbumManager: ObservableObject {
             let maxLocations = 45
             if uniqueLocations.count > maxLocations {
                 uniqueLocations = Array(uniqueLocations.prefix(maxLocations))
+                locationAssets = Array(locationAssets.prefix(maxLocations))
             }
 
-            print("[Location] Total photos: \(locations.count), Unique locations: \(uniqueLocations.count)")
+            print("[Location] Total photos with location: \(assetLocations.count), Unique locations: \(uniqueLocations.count)")
 
             // Geocode all unique locations using CLGeocoder with rate limiting
             var cityCounts: [String: Int] = [:]
             var cityOrder: [String] = []  // Preserve insertion order
+            var cityPhotos: [String: [PHAsset]] = [:]
             let geocoder = CLGeocoder()
 
-            // Helper: record a city and immediately update UI, preserving order
-            @Sendable func recordCity(_ city: String) async {
+            // Helper: record a city with its assets and immediately update UI
+            @Sendable func recordCity(_ city: String, assets: [PHAsset]) async {
                 guard !city.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                 if cityCounts[city] == nil {
                     cityOrder.append(city)
                 }
                 cityCounts[city, default: 0] += 1
+                cityPhotos[city, default: []].append(contentsOf: assets)
                 let ordered = cityOrder.map { ($0, cityCounts[$0]!) }
+                let photosSnapshot = cityPhotos
                 await MainActor.run {
                     self.cityInfo = ordered
+                    self.photosByCity = photosSnapshot
                 }
             }
 
@@ -389,12 +412,14 @@ class PhotoAlbumManager: ObservableObject {
                 // Check for cancellation
                 if Task.isCancelled { return }
 
+                let assets = locationAssets[index]
+
                 // Try local bounding box lookup first
                 let lat = location.coordinate.latitude
                 let lng = location.coordinate.longitude
                 if let localCity = self.lookupLocalCity(lat: lat, lng: lng) {
                     print("[Location] Local match: \(localCity)")
-                    await recordCity(localCity)
+                    await recordCity(localCity, assets: assets)
                     continue
                 }
 
@@ -412,7 +437,7 @@ class PhotoAlbumManager: ObservableObject {
                                 ?? placemark.administrativeArea
                                 ?? placemark.name {
                                 print("[Location] Found city: \(city)")
-                                await recordCity(city)
+                                await recordCity(city, assets: assets)
                             }
                         }
                         success = true
@@ -430,7 +455,7 @@ class PhotoAlbumManager: ObservableObject {
                             print("[Location] CLGeocoder failed, trying Nominatim...")
                             if let city = await geocodeWithNominatim(location: location) {
                                 print("[Location] Nominatim found: \(city)")
-                                await recordCity(city)
+                                await recordCity(city, assets: assets)
                             } else {
                                 print("[Location] Nominatim also failed, skipping this location")
                             }
@@ -440,7 +465,7 @@ class PhotoAlbumManager: ObservableObject {
                             print("[Location] GEO error 2, trying Nominatim...")
                             if let city = await geocodeWithNominatim(location: location) {
                                 print("[Location] Nominatim found: \(city)")
-                                await recordCity(city)
+                                await recordCity(city, assets: assets)
                             } else {
                                 print("[Location] Nominatim also failed, skipping this location")
                             }
@@ -531,8 +556,21 @@ class PhotoAlbumManager: ObservableObject {
         return photosByMonth[month] ?? [:]
     }
 
+    // Get cached thumbnail synchronously (returns nil if not cached)
+    func cachedImage(for asset: PHAsset, size: CGSize) -> UIImage? {
+        let key = "\(asset.localIdentifier)_\(Int(size.width))x\(Int(size.height))"
+        return thumbnailCache[key]
+    }
+
     // Load image for a specific asset (for yearly view)
     func loadImage(for asset: PHAsset, size: CGSize, completion: @escaping (UIImage?) -> Void) {
+        let key = "\(asset.localIdentifier)_\(Int(size.width))x\(Int(size.height))"
+
+        if let cached = thumbnailCache[key] {
+            completion(cached)
+            return
+        }
+
         let options = PHImageRequestOptions()
         options.isSynchronous = false
         options.deliveryMode = .highQualityFormat
@@ -540,7 +578,9 @@ class PhotoAlbumManager: ObservableObject {
 
         imageManager.requestImage(for: asset, targetSize: size, contentMode: .aspectFill, options: options) { image, _ in
             if let image = image {
-                completion(self.cropToSquare(image: image))
+                let cropped = self.cropToSquare(image: image)
+                self.thumbnailCache[key] = cropped
+                completion(cropped)
             } else {
                 completion(nil)
             }
